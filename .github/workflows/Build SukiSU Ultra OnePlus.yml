@@ -131,7 +131,7 @@ jobs:
           echo "FILE_CONF=$FILE_CONF" >> $GITHUB_ENV
           echo "FILE_BASE=$FILE_BASE" >> $GITHUB_ENV
 
-          # 动态调用源码清单仓库,仓库优先级：1️⃣ OnePlusOSS → 2️⃣ Numbersf(可换)
+          # 动态调用源码清单仓库，仓库优先级：1️⃣ OnePlusOSS → 2️⃣ Numbersf(可换)
           declare -A REPOS
           REPOS["OnePlusOSS"]="https://api.github.com/repos/OnePlusOSS/kernel_manifest"
           REPOS["Dynamic"]="https://api.github.com/repos/Numbersf/kernel_manifest"
@@ -552,6 +552,7 @@ jobs:
           cd kernel_workspace
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}
           git clone https://github.com/ShirkNeko/SukiSU_patch.git
+          git clone https://github.com/Numbersf/Action-Build.git
           cd kernel_platform
           echo "正在拉取susfs补丁"
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch ./common/
@@ -572,7 +573,7 @@ jobs:
 
           if [ "$GKI_V" == "android13-5.15" ] && [ "$SUBLEVEL" -lt 123 ]; then
             echo "修复内核版本5.15.0到5.15.123仅支持旧版C库造成的一些bug"
-            curl -Lo fix_5.15.legacy.patch --retry 5 --retry-delay 2 --retry-connrefused https://raw.githubusercontent.com/Numbersf/Action-Build/SukiSU-Ultra/patches/fix_5.15.legacy
+            cp ../../Action-Build/patches/fix_5.15.legacy ./fix_5.15.legacy.patch
             patch -p1 < fix_5.15.legacy.patch
             echo "fix_5.15_patch完成"
           fi
@@ -593,14 +594,14 @@ jobs:
           fake_patched=0
           if [ "$GKI_V" = "android15-6.6" ]; then
             if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-              echo "未找到 nr_subpages,正在进行补丁修复"
+              echo "未找到 nr_subpages，正在进行补丁修复"
               sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
               fake_patched=1
             fi
           fi
           if [ "$GKI_V" = "android12-5.10" ] || [ "$GKI_V" = "android13-5.15" ]; then
             if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
-              echo "未找到 vma_pages,正在进行补丁修复"
+              echo "未找到 vma_pages，正在进行补丁修复"
               fake_patched=1
             fi
           fi
@@ -636,8 +637,12 @@ jobs:
         if: ${{ env.KERNEL_VERSION == '6.6' && github.event.inputs.SCHED == 'false' }}
         run: |
           cd kernel_workspace/kernel_platform/common
+          if [ -d "./kernel/sched/hmbird" ]; then
+            echo "源码中风驰补丁已经存在，启用二次回退"
+            exit 0
+          fi
           sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
-          wget https://github.com/Numbersf/Action-Build/raw/SukiSU-Ultra/patches/hmbird_patch.patch
+          cp ../../Action-Build/patches/hmbird_patch.patch ./hmbird_patch.patch
           echo "正在打OGKI转换GKI补丁"
           patch -p1 -F 3 < hmbird_patch.patch
           echo "OGKI转换GKI_patch完成"
@@ -682,7 +687,7 @@ jobs:
           curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./security/Kconfig
 
-      # 配置信息,带*为附加项目,具有一定危险性和不确定性
+      # 配置信息，带*为附加项目，具有一定危险性和不确定性
       - name: Add Configuration Settings
         run: |
           cd kernel_workspace/kernel_platform/common
@@ -780,7 +785,7 @@ jobs:
           cd kernel_workspace/kernel_platform/common
           if [[ "${CPU}" == sm* ]]; then
             echo "修复启用IPv6 NAT后可能出现的设备误报…"
-            wget https://github.com/Numbersf/Action-Build/raw/SukiSU-Ultra/patches/IPv6_NAT_FIX.patch
+            cp ../../Action-Build/patches/IPv6_NAT_FIX.patch ./IPv6_NAT_FIX.patch
             patch -p1 -F 3 < IPv6_NAT_FIX.patch
           else
             echo "你的设备不支持 IPv6 NAT，跳过此步骤。"
