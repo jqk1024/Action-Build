@@ -24,9 +24,12 @@ on:
           - oneplus_open_v
           - oneplus_open_b
           - oneplus_12_v
+          - oneplus_12_b
           - oneplus_13r
+          - oneplus_13r_b
           - oneplus_ace3_pro_v
           - oneplus_ace5
+          - oneplus_ace5_b
           - oneplus_pad_pro_v
           - oneplus_pad2_v
           - oneplus_nord_5
