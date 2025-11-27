@@ -42,9 +42,18 @@ on:
           - oneplus_ace5_ultra
           - oneplus_ace_6
           - oneplus_15
+      MANAGER_SOURCE:
+        type: choice
+        description: "管理器调用方式"
+        required: true
+        default: OFFICIAL
+        options:
+          - OFFICIAL
+          - SPOOF
+          - MIUIX
       SUSFS_CI:
         type: choice
-        description: "下载SUSFS模块调用方式"
+        description: "下载SUSFS模块调用版本"
         required: true
         default: NoN
         options:
@@ -53,22 +62,31 @@ on:
           - NoN
       SUSFS_META:
         type: string
-        description: "回退SUSFS提交hash(留空不修改)"
+        description: "回退SUSFS提交hash"
         required: false
         default: ""
-      KSU_META:
+      DYNAMIC_REPO:
         type: string
-        description: "分支名(必填)/自定义版本标识(留空不修改)/回退分支提交hash(留空不修改)"
-        required: false
-        default: "susfs-main/Numbersf/"
+        description: "动态清单仓库所有者"
+        required: true
+        default: "Numbersf"
       BUILD_TIME:
         type: string
         description: "自定义构建时间(输入F使用当前UTC时间)"
         required: false
         default: "Mon Aug 18 09:30:24 UTC 2025"
+      KSU_META:
+        type: string
+        description: "分支名(必填)/自定义版本标识(留空不修改)/回退分支提交hash(留空不修改)"
+        required: false
+        default: "susfs-main/Numbersf/"
       SUFFIX:
         type: string
         description: "自定义内核后缀(不输入使用随机字符串)"
+        required: false
+        default: ""
+      SUBLEVEL:
+        description: "自定义内核等级欺骗(SUBLEVEL)"
         required: false
         default: ""
       FAST_BUILD:
@@ -146,9 +164,10 @@ jobs:
           echo "FILE_BASE=$FILE_BASE" >> $GITHUB_ENV
 
           # 动态调用源码清单仓库，仓库优先级：1️⃣ OnePlusOSS → 2️⃣ Numbersf(可换)
+          DYNAMIC_REPO_INPUT="${{ github.event.inputs.DYNAMIC_REPO }}"
           declare -A REPOS
           REPOS["OnePlusOSS"]="https://api.github.com/repos/OnePlusOSS/kernel_manifest"
-          REPOS["Dynamic"]="https://api.github.com/repos/Numbersf/kernel_manifest"
+          REPOS["Dynamic"]="https://api.github.com/repos/${DYNAMIC_REPO_INPUT}/kernel_manifest"
 
           FOUND_REPO=""
           FOUND_BRANCH=""
@@ -251,6 +270,7 @@ jobs:
           echo "Custom SUFFIX: ${{ github.event.inputs.SUFFIX }}"
           echo -n "SUFFIX Unicode: "
           python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.SUFFIX }}'''))"
+          echo "Selected MANAGER_SOURCE: ${{ github.event.inputs.MANAGER_SOURCE }}"
           echo "Selected SUSFS_CI: ${{ github.event.inputs.SUSFS_CI }}"
           echo "Selected KPM: ${{ github.event.inputs.KPM }}"
           echo "Selected LSM: ${{ github.event.inputs.LSM }}"
@@ -368,7 +388,13 @@ jobs:
           ORIG_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
 
           # 强制修改 SUBLEVEL(内核等级)，默认关闭
-          # sed -i 's/^SUBLEVEL[[:space:]]*=[[:space:]]*.*/SUBLEVEL = 99/' ./common/Makefile
+          SUBLEVEL_INPUT="${{ github.event.inputs.SUBLEVEL }}"
+          if [ -n "$SUBLEVEL_INPUT" ]; then
+            echo "修改 SUBLEVEL 为 $SUBLEVEL_INPUT"
+            sed -i "s/^\(SUBLEVEL[[:space:]]*=[[:space:]]*\).*/\1$SUBLEVEL_INPUT/" ./common/Makefile
+          else
+            echo "未指定 SUBLEVEL，保持默认"
+          fi
 
           # 读取修改后的版本
           NEW_VERSION=$(awk '/^VERSION =/ {v=$3} /^PATCHLEVEL =/ {p=$3} /^SUBLEVEL =/ {s=$3} END {print v"."p"."s}' ./common/Makefile)
@@ -380,6 +406,7 @@ jobs:
             echo "Kernel Version:$ORIG_VERSION No changes"
             echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
           fi
+
           # 内核版本的数字转换(对比用)
           echo "KV1=${BRANCH#*-}"       | cut -d. -f1 >> $GITHUB_ENV
           echo "KV2=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
@@ -1015,23 +1042,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          MANAGER_SOURCE="${{ github.event.inputs.MANAGER_SOURCE }}"
+          case "$MANAGER_SOURCE" in
+            MIUIX)
+              BRANCH="miuix"
+              ARTIFACT_NAME="Manager"
+              ;;
+            SPOOF)
+              BRANCH="main"
+              ARTIFACT_NAME="Spoofed-Manager"
+              ;;
+            OFFICIAL|*)
+              BRANCH="main"
+              ARTIFACT_NAME="Manager"
+              ;;
+          esac
+          echo "Using branch: $BRANCH"
+          echo "Downloading artifact: $ARTIFACT_NAME"
           run_id=$(gh api \
-            "repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?branch=main&status=success&per_page=1" \
+            "repos/SukiSU-Ultra/SukiSU-Ultra/actions/workflows/build-manager.yml/runs?branch=$BRANCH&status=success&per_page=1" \
             --jq '.workflow_runs[0].id' || echo "")
+
           if [[ -z "$run_id" ]]; then
-            echo "No successful workflow run found. Skipping artifact download."
-          else
-            artifact_url=$(gh api \
-              "repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/$run_id/artifacts" | \
-              jq -r '.artifacts[] | select(.name == "Manager") | .archive_download_url' | head -n1)
-            if [[ -z "$artifact_url" ]]; then
-              echo "No 'Manager' artifact found in run $run_id. Skipping download."
-            else
-              echo "Downloading from: $artifact_url"
-              curl -fL -H "Authorization: token $GITHUB_TOKEN" -o Manager.zip "$artifact_url"
-              unzip -j Manager.zip "*.apk" -d ./AnyKernel3/
-            fi
+            echo "No successful workflow run found on branch $BRANCH. Skipping download."
+            exit 0
           fi
+          artifact_url=$(gh api \
+            "repos/SukiSU-Ultra/SukiSU-Ultra/actions/runs/$run_id/artifacts" | \
+            jq -r ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .archive_download_url" | head -n1)
+
+          if [[ -z "$artifact_url" ]]; then
+            echo "No artifact '$ARTIFACT_NAME' found in run $run_id. Skipping download."
+            exit 0
+          fi
+          echo "Downloading from: $artifact_url"
+          curl -fL -H "Authorization: token $GITHUB_TOKEN" -o "${ARTIFACT_NAME}.zip" "$artifact_url"
+          unzip -j "${ARTIFACT_NAME}.zip" "*.apk" -d ./AnyKernel3/
 
       - name: Set zip Suffix
         id: suffix
