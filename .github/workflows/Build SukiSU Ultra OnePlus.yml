@@ -51,9 +51,14 @@ on:
           - CI
           - Release
           - NoN
+      SUSFS_META:
+        type: string
+        description: "回退SUSFS提交hash(留空不修改)"
+        required: false
+        default: ""
       KSU_META:
         type: string
-        description: "分支名(必填)/自定义版本标识(留空不修改)/调整提交hash(留空不修改)"
+        description: "分支名(必填)/自定义版本标识(留空不修改)/回退分支提交hash(留空不修改)"
         required: false
         default: "susfs-main/Numbersf/"
       BUILD_TIME:
@@ -81,6 +86,11 @@ on:
         description: "是否启用关键分区写入保护模块(BBG)？"
         required: true
         default: true
+      SUSFS_DEV:
+        type: boolean
+        description: "是否拉取SUSFS-DEV分支？"
+        required: true
+        default: false
       SCHED:
         type: boolean
         description: "是否添加风驰驱动1.0？"
@@ -234,6 +244,7 @@ jobs:
           echo "Selected BUILD_METHOD: ${{ env.BUILD_METHOD }}"
           echo "Selected FILE: ${{ github.event.inputs.FILE }}"
           echo "Custom KSU_META: ${{ github.event.inputs.KSU_META }}"
+          echo "Custom SUSFS_META: ${{ github.event.inputs.SUSFS_META }}"
           echo "Custom BUILD_TIME: ${{ github.event.inputs.BUILD_TIME }}"
           echo -n "BUILD_TIME Unicode: "
           python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.BUILD_TIME }}'''))"
@@ -241,8 +252,9 @@ jobs:
           echo -n "SUFFIX Unicode: "
           python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.SUFFIX }}'''))"
           echo "Selected SUSFS_CI: ${{ github.event.inputs.SUSFS_CI }}"
-          echo "Selected LSM: ${{ github.event.inputs.LSM }}"
           echo "Selected KPM: ${{ github.event.inputs.KPM }}"
+          echo "Selected LSM: ${{ github.event.inputs.LSM }}"
+          echo "Selected SUSFS_DEV: ${{ github.event.inputs.SUSFS_DEV }}"
           echo "Selected FAST_BUILD: ${{ github.event.inputs.FAST_BUILD }}"
           echo "Selected SCHED: ${{ github.event.inputs.SCHED }}"
           echo "Selected ZRAM: ${{ github.event.inputs.ZRAM }}"
@@ -368,6 +380,9 @@ jobs:
             echo "Kernel Version:$ORIG_VERSION No changes"
             echo "TKERNEL_VERSION=$ORIG_VERSION" >> $GITHUB_ENV
           fi
+          # 内核版本的数字转换(对比用)
+          echo "KV1=${BRANCH#*-}"       | tr -d '.' >> $GITHUB_ENV
+          echo "KV2=${NEW_VERSION}"     | tr -d '.' >> $GITHUB_ENV
 
       # 自定义内核后缀
       - name: Custom Kernel Suffix if set
@@ -554,7 +569,15 @@ jobs:
           FILE: ${{ github.event.inputs.FILE }}
         run: |
           cd kernel_workspace
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}${{ github.inputs.SUSFS_DEV == 'true' && '-dev' || '' }}
+          if [ -n "${SUSFS_META}" ]; then
+            echo "SUSFS_META 不为空，回退到 $SUSFS_META"
+            cd susfs4ksu
+            git reset --hard "$SUSFS_META"
+            cd ..
+          else
+           echo "SUSFS_META 为空，使用最新上游 SUSFS"
+          fi
           git clone https://github.com/ShirkNeko/SukiSU_patch.git
           git clone https://github.com/Numbersf/Action-Build.git
           cd kernel_platform
@@ -628,17 +651,9 @@ jobs:
             fi
           fi
 
-      - name: Apply Hide Stuff Patches
-        run: |
-          cd kernel_workspace/kernel_platform/common
-          cp ../../SukiSU_patch/69_hide_stuff.patch ./
-          echo "正在打隐藏应用补丁"
-          patch -p1 -F 3 < 69_hide_stuff.patch
-          echo "隐藏应用_patch完成"
-
       # OGKI转换GKI，无需修改 dtbo 开机
       - name: Apply Convert HMBIRD_OGKI to HMBIRD_GKI
-        if: fromJson(env.KERNEL_VERSION) >= 6.6 && github.event.inputs.SCHED == 'false'
+        if: fromJson(env.KV1) >= 66 && github.event.inputs.SCHED == 'false'
         run: |
           cd kernel_workspace/kernel_platform/common
           for p in ./kernel/sched/hmbird* ./vendor/oplus/kernel/cpu/sched_ext/hmbird*; do
