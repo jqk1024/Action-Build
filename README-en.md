@@ -118,11 +118,9 @@ If you don’t want to use a custom version tag, just leave it empty (e.g. susfs
 Regardless of whether the custom version identifier and fallback hash are enabled, they must be separated by two /(U+002F) and cannot be removed
 ```  
  
-- Remove ``KPM`` support except for configuration options; you can apply patches using the ``KPM`` patching tool included in ``SukiSU Ultra`` when installing ``Anykernel3``.  
- 
 - Fully automated retrieval of kernel information and build information.  
  
-- Allow modifying `SUBLEVEL`,Used to fix the issue where the device fails to boot after a system update changes the `SUBLEVEL` but the kernel source has not been updated.Disabled by default. Default value is `99`. Modify if needed.  
+- Allow modifying `SUBLEVEL`,Used to fix the issue where the device fails to boot after a system update changes the `SUBLEVEL` but the kernel source has not been updated.  
 ```
 6.1.75->6.1.99
 ```  
