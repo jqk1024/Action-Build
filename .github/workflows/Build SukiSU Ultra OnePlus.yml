@@ -104,6 +104,16 @@ on:
         description: "是否启用关键分区写入保护模块(BBG)？"
         required: true
         default: true
+      NETFILTER:
+        type: boolean
+        description: "是否启用网络功能拓展(NETFILTER)？"
+        required: true
+        default: true
+      BBR_ECN:
+        type: boolean
+        description: "是否启用网络优化算法(BBR+ECN)？"
+        required: true
+        default: true
       SUSFS_DEV:
         type: boolean
         description: "是否拉取SUSFS-DEV分支？"
@@ -274,6 +284,8 @@ jobs:
           python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.SUFFIX }}'''))"
           echo "Selected KPM: ${{ github.event.inputs.KPM }}"
           echo "Selected LSM: ${{ github.event.inputs.LSM }}"
+          echo "Selected NETFILTER: ${{ github.event.inputs.NETFILTER }}"
+          echo "Selected BBR_ECN: ${{ github.event.inputs.BBR_ECN }}"
           echo "Selected SUSFS_DEV: ${{ github.event.inputs.SUSFS_DEV }}"
           echo "Selected FAST_BUILD: ${{ github.event.inputs.FAST_BUILD }}"
           echo "Selected SCHED: ${{ github.event.inputs.SCHED }}"
@@ -766,19 +778,19 @@ jobs:
           echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
 
-          # BBR配置*
-          echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
-          echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
-
-          # ECN配置*
-          echo "CONFIG_IP_ECN=y" >> "$CONFIG_FILE"
-          echo "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE"
-          echo "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE"
-          echo "CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE"
+          # BBR & ECN配置*
+          if [ "${{ github.event.inputs.BBR_ECN }}" = "true" ]; then
+            echo "CONFIG_TCP_CONG_ADVANCED=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_BBR=y" >> "$CONFIG_FILE"
+            echo "CONFIG_NET_SCH_FQ=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_BIC=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_WESTWOOD=n" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_CONG_HTCP=n" >> "$CONFIG_FILE"
+            echo "CONFIG_IP_ECN=y" >> "$CONFIG_FILE"
+            echo "CONFIG_TCP_ECN=y" >> "$CONFIG_FILE"
+            echo "CONFIG_IPV6_ECN=y" >> "$CONFIG_FILE"
+            echo "CONFIG_IP_NF_TARGET_ECN=y" >> "$CONFIG_FILE"
+          fi
 
           # ZRAM配置*
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
@@ -796,7 +808,7 @@ jobs:
           fi
 
           # IPSET & IPv6_NAT配置*
-          if [[ "${CPU}" == sm* ]]; then
+          if [[ "${CPU}" == sm* && "${{ github.event.inputs.NETFILTER }}" == "true" ]]; then
             echo "CONFIG_BPF_STREAM_PARSER=y" >> "$CONFIG_FILE"
             echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> "$CONFIG_FILE"
             echo "CONFIG_NETFILTER_XT_SET=y" >> "$CONFIG_FILE"
@@ -826,6 +838,7 @@ jobs:
           sed -i 's/check_defconfig//' ./build.config.gki
 
       - name: Fix IPv6_NAT Error
+        if: ${{ github.event.inputs.NETFILTER == 'true' }}
         run: |
           cd kernel_workspace/kernel_platform/common
           if [[ "${CPU}" == sm* ]]; then
