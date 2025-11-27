@@ -44,7 +44,7 @@ on:
           - oneplus_15
       MANAGER_SOURCE:
         type: choice
-        description: "管理器调用方式"
+        description: "管理器调用方向"
         required: true
         default: OFFICIAL
         options:
@@ -53,7 +53,7 @@ on:
           - MIUIX
       SUSFS_CI:
         type: choice
-        description: "下载SUSFS模块调用版本"
+        description: "SUSFS模块下载调用方向"
         required: true
         default: NoN
         options:
@@ -62,7 +62,7 @@ on:
           - NoN
       SUSFS_META:
         type: string
-        description: "回退SUSFS提交hash"
+        description: "回退SUSFS到指定哈希版本"
         required: false
         default: ""
       DYNAMIC_REPO:
@@ -77,7 +77,7 @@ on:
         default: "Mon Aug 18 09:30:24 UTC 2025"
       KSU_META:
         type: string
-        description: "分支名(必填)/自定义版本标识(留空不修改)/回退分支提交hash(留空不修改)"
+        description: "分支名(必填)/自定义版本标识(留空不修改)/回退分支提交哈希版本(留空不修改)"
         required: false
         default: "susfs-main/Numbersf/"
       SUFFIX:
@@ -262,16 +262,16 @@ jobs:
           echo "Selected ANDROID_VERSION: ${{ env.ANDROID_VERSION }}"
           echo "Selected BUILD_METHOD: ${{ env.BUILD_METHOD }}"
           echo "Selected FILE: ${{ github.event.inputs.FILE }}"
-          echo "Custom KSU_META: ${{ github.event.inputs.KSU_META }}"
+          echo "Selected MANAGER_SOURCE: ${{ github.event.inputs.MANAGER_SOURCE }}"
+          echo "Selected SUSFS_CI: ${{ github.event.inputs.SUSFS_CI }}"
           echo "Custom SUSFS_META: ${{ github.event.inputs.SUSFS_META }}"
+          echo "Custom KSU_META: ${{ github.event.inputs.KSU_META }}"
           echo "Custom BUILD_TIME: ${{ github.event.inputs.BUILD_TIME }}"
           echo -n "BUILD_TIME Unicode: "
           python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.BUILD_TIME }}'''))"
           echo "Custom SUFFIX: ${{ github.event.inputs.SUFFIX }}"
           echo -n "SUFFIX Unicode: "
           python3 -c "print(''.join(f'U+{ord(c):04X} ' for c in '''${{ github.event.inputs.SUFFIX }}'''))"
-          echo "Selected MANAGER_SOURCE: ${{ github.event.inputs.MANAGER_SOURCE }}"
-          echo "Selected SUSFS_CI: ${{ github.event.inputs.SUSFS_CI }}"
           echo "Selected KPM: ${{ github.event.inputs.KPM }}"
           echo "Selected LSM: ${{ github.event.inputs.LSM }}"
           echo "Selected SUSFS_DEV: ${{ github.event.inputs.SUSFS_DEV }}"
